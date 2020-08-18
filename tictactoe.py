@@ -11,9 +11,13 @@ class TicTacToe():
 		self.markers = [1, 2]
 		self.cur_player = self.players[0]
 
-	def return_board(self):
+	def get_board(self):
 
 		return self.board
+
+	def get_state(self):
+
+		return ' '.join(map(str, self.board.flatten()))
 
 	def get_player_turn(self):
 
@@ -52,14 +56,14 @@ class TicTacToe():
 
 	def is_win(self):
 
-		win_1 = np.array([1,1,1])
-		win_2 = np.array([2,2,2])
+		win_1 = np.array([1.,1.,1.])
+		win_2 = np.array([2.,2.,2.])
 
 		for i in range(3):
 			if (self.board[:,i] == win_1).all() or (self.board[:,i] == win_2).all():
 				return True
 		for i in range(3):
-			if (self.board[i,:] == win_1).all() or (self.board[:,i] == win_2).all():
+			if (self.board[i,:] == win_1).all() or (self.board[i,:] == win_2).all():
 				return True
 
 		diag = np.array([self.board[0][0], self.board[1][1], self.board[2][2]])
@@ -79,15 +83,28 @@ class TicTacToe():
 
 	def play_game(self):
 
-		print('INITIALIZE DA GAME\n')
+		#print('INITIALIZE DA GAME\n')
 		while(not self.is_win() and not self.is_over()):
-			print(self.return_board())
+			if self.cur_player.type == 'human':
+				print(self.get_board())
+			before = self.get_state()
 			possible_moves = self.get_possible_moves()
-			move_tuple = self.cur_player.pick_move(possible_moves, self.return_board())
+			move_tuple = self.cur_player.pick_move(possible_moves, before)
 			self.play_turn(move_tuple)
+			after = self.get_state()
 
-		print('Game Over!')
-		print(self.return_board())
+			if self.is_win():
+				self.cur_player.update_q(before, move_tuple, after, 10) # Game over - give all the rewards
+				#self.cur_player.update_q(losing_state, losing_move, winning_state, -10) # Game over - give all the rewards
+
+			elif self.is_over():
+				self.cur_player.update_q(before, move_tuple, after, -1) # Game is tie - no reward
+
+			else:
+				self.cur_player.update_q(before, move_tuple, after, 0) # Game still going - move is neutral
+				losing_state = before
+				losing_move = move_tuple
+				winning_state = after
 
 class Player():
 
@@ -103,6 +120,7 @@ class Human(Player):
 
 	def __init__(self, name):
 		super().__init__(name)
+		self.type = 'human'
 
 	def pick_move(self, possible_moves, state):
 
@@ -111,6 +129,10 @@ class Human(Player):
 		move_tuple = (int(move.split(' ')[0]), int(move.split(' ')[1]))
 
 		return move_tuple
+
+	def update_q(self, state, move, new_state, r, lam=0.9):
+
+		return
 
 class Dumb_AI(Player):
 
@@ -123,40 +145,70 @@ class Dumb_AI(Player):
 		return move
 
 
-p1 = Dumb_AI('Josh')
-p2 = Dumb_AI('Hallacy')
+class Smart_AI(Player):
 
-for i in range(100):
-	t = TicTacToe(p1, p2)
-	t.play_game()
+	def __init__(self, name, game_dict={}, threshold=0.5):
+		super().__init__(name)
+
+		self.game_dict = game_dict
+		self.type = 'ai'
+		self.threshold = threshold
+
+	def pick_move(self, possible_moves, state):
+
+		if self.game_dict == {} or self.game_dict[state] == {}:
+			nmoves = len(possible_moves)
+			move = possible_moves[random.randrange(nmoves)]	
+			return move
+
+		else:
+			best_move = max(self.game_dict[state], key=self.game_dict[state].get)
+			if random.random() <self.threshold:
+				move = best_move
+			else:
+				nmoves = len(possible_moves)
+				move = possible_moves[random.randrange(nmoves)]			
+			return move
+
+	def update_q(self, state, move, new_state, r, lam=0.9):
+
+		if state not in self.game_dict.keys():
+			self.game_dict[state] = {}	
+			
+		if new_state not in self.game_dict.keys():
+			self.game_dict[new_state] = {}		
+
+		if self.game_dict[new_state] == {}:
+
+			self.game_dict[state][move] = r
+
+		else:
+			self.game_dict[state][move] = r - lam * max([self.game_dict[new_state][x] for x in self.game_dict[new_state]])
+
+	def dump_q(self, outfile='./q_table_tictactoe.pickle'):
+		import pickle
+
+		with open(outfile, 'wb') as f:
+			pickle.dump(self.game_dict, f)
 
 
+import pickle
+ai_dict = pickle.load( open('./q_table_tictactoe.pickle', 'rb') )
 
-# print(t.return_board())
-# t.play_turn((1,2))
-# print(t.is_win())
-# print(t.return_board())
-# t.play_turn((1,1))
-# print(t.is_win())
-# print(t.return_board())
-# t.play_turn((0,1))
-# print(t.is_win())
-# print(t.return_board())
-# t.play_turn((2,0))
-# print(t.is_win())
-# print(t.return_board())
-# t.play_turn((0,0))
-# print(t.is_win())
-# print(t.return_board())
-# t.play_turn((0,2))
-# print(t.is_win())
-# print(t.return_board())
-# t.play_turn((1,0))
-# print(t.is_win())
-# print(t.return_board())
-# t.play_turn((2,1))
-# print(t.is_win())
-# print(t.return_board())
-# t.play_turn((2,2))
-# print(t.is_win())
-# print(t.return_board())
+p1 = Smart_AI('Josh', game_dict=ai_dict)
+
+# for i in range(30000):
+#  	t = TicTacToe(p1, p1)
+#  	t.play_game()
+
+# p1.dump_q()
+
+#ai_dict = p1.game_dict
+
+p1 = Smart_AI('Josh', game_dict=ai_dict, threshold=1.0)
+p2 = Human('Hallacy')
+
+t = TicTacToe(p2, p1)
+t.play_game()
+print(t.get_board())
+
