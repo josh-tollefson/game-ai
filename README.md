@@ -9,5 +9,5 @@
 
 ## Files:
 
-- tictactoe.py: Build AI and play tictactoe. Containes classes to build board and play the game and initalize human & AI players
+- tictactoe.py: Build AI and play tictactoe. Contains classes to build board and play the game and initalize human & AI players
 - *.pickle: pickle file containing dictionary of q-table 
